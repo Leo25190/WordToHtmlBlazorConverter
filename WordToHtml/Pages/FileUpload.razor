@@ -1,0 +1,76 @@
+﻿@page "/fileupload"
+@using Mammoth
+@using Microsoft.AspNetCore.Components.Forms
+@using BlazorDownloadFile
+@inject IBlazorDownloadFileService DownloadFileService
+@using System.IO
+
+<PageTitle>File Upload</PageTitle>
+
+<h3>Convertisseur de Document Word</h3>
+
+<InputFile OnChange="HandleFileSelected" />
+
+@if (!string.IsNullOrEmpty(uploadedFileName))
+{
+    <p>Fichier Téléchargé: @uploadedFileName</p>
+    <div>
+        <h4>HTML Converti</h4>
+        <textarea rows="10" cols="80" @bind="formattedHtml"></textarea>
+    </div>
+    <div>
+        <h4>Preview</h4>
+        <div>
+            <textarea rows="10" cols="80">@markupHtml</textarea>
+        </div>
+    </div>
+    <div>
+        <button @onclick="DownloadHtmlFile">Télécharger HTML</button>
+    </div>
+}
+
+@code {
+    private IBrowserFile uploadedFile;
+    private string uploadedFileName;
+    private string convertedHtml;
+    private string formattedHtml;
+    private MarkupString markupHtml;
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        uploadedFile = e.File;
+        uploadedFileName = uploadedFile.Name;
+
+        using var stream = uploadedFile.OpenReadStream();
+        using var memoryStream = new MemoryStream();
+        await stream.CopyToAsync(memoryStream);
+        memoryStream.Position = 0;
+
+        try
+        {
+            var converter = new DocumentConverter().AddStyleMap("p[style-name='Title'] => h1");
+            var result = converter.ConvertToHtml(memoryStream); // Use ConvertToHtmlAsync for async processing
+            convertedHtml = result.Value; // Converted HTML
+            formattedHtml = FormatHtml(convertedHtml); // Formatted HTML
+            markupHtml = (MarkupString)formattedHtml;
+            StateHasChanged(); // Force the component to re-render
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+            convertedHtml = "Erreur lors de la conversion du document";
+            StateHasChanged(); // Ensure the error message is displayed
+        }
+    }
+
+    private string FormatHtml(string html)
+    {
+        return html.Replace("><", ">\n<");
+    }
+
+    private async Task DownloadHtmlFile()
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(formattedHtml);
+        await DownloadFileService.DownloadFile("converted.html", bytes, "text/html");
+    }
+}
